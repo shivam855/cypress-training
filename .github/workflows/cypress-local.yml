@@ -1,4 +1,5 @@
 name: Cypress Mock Regression
+
 on:  
   workflow_dispatch:    
     inputs:      
@@ -7,7 +8,7 @@ on:
         required: true
 
 jobs:
-  test:
+  cypress-run:
     name: Test on node ${{ matrix.node_version }} and ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
