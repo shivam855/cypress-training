@@ -14,7 +14,7 @@ jobs:
     strategy:
       matrix:
         node_version: ['18.x', '20.x']
-        os: [ubuntu-latest, windows-latest, macOS-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
     - uses: actions/checkout@v4
@@ -23,17 +23,17 @@ jobs:
       with:
         node-version: ${{ matrix.node_version }}
 
-    - uses: cypress-io/github-action@v4.2.0
-        name: Cypress run       
-        with:
-          start: npm run cypress-dashboard
-          config-file: cypress.config.js
-          record: true
-          parallel: true
-          browser: chrome
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}    
+    - name: Cypress run
+      uses: cypress-io/github-action@v4.2.0
+      with:
+        start: npm run cypress-dashboard
+        config-file: cypress.config.js
+        record: true
+        parallel: true
+        browser: chrome
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}    
 
-      - id: set-failure
-        if: failure()
-        run: echo "::set-output name=status::true"
+    - id: set-failure
+      if: failure()
+      run: echo "::set-output name=status::true"
