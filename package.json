@@ -1,0 +1,16 @@
+{
+  "name": "demo-cypress",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "ui": "npx cypress open",
+    "terminal": "npx cypress run"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cypress": "^13.11.0",
+    "cypress-cucumber-preprocessor": "^4.3.1"
+  }
+}

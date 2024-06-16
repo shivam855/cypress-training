@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Form Elements Example</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+      }
+      form {
+        max-width: 400px;
+        margin: 0 auto;
+      }
+      label {
+        display: block;
+        margin-top: 20px;
+      }
+      input,
+      select {
+        width: 100%;
+        padding: 8px;
+        margin-top: 5px;
+        box-sizing: border-box;
+      }
+      input[type="checkbox"],
+      input[type="radio"] {
+        width: auto;
+      }
+      .radio-group,
+      .checkbox-group {
+        display: flex;
+        flex-direction: column;
+      }
+      .success-message {
+        display: none;
+        color: green;
+        font-weight: bold;
+        margin-top: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Form Elements Example</h1>
+
+    <form id="exampleForm">
+      <!-- Input Box -->
+      <label for="textInput">Text Input:</label>
+      <input
+        type="text"
+        id="textInput"
+        name="textInput"
+        placeholder="Enter some text"
+      />
+      <label for="textInput">Text Input:</label>
+      <input
+        type="text"
+        id="textInput"
+        name="textInput"
+        placeholder="Enter some text"
+      />
+      <label for="textInput">Text Input:</label>
+      <input
+        type="text"
+        id="textInput"
+        name="textInput"
+        placeholder="Enter some text"
+      />
+      <label for="textInput">Text Input:</label>
+      <input
+        type="text"
+        id="textInput"
+        name="textInput"
+        placeholder="Enter some text"
+      />
+
+      <!-- Checkbox -->
+      <div class="checkbox-group">
+        <label>Checkbox:</label>
+        <label
+          ><input type="checkbox" name="checkbox1" value="option1" /> Option
+          1</label
+        >
+        <label
+          ><input type="checkbox" name="checkbox2" value="option2" /> Option
+          2</label
+        >
+        <label
+          ><input type="checkbox" name="checkbox1" value="option3" /> Option
+          3</label
+        >
+        <label
+          ><input type="checkbox" name="checkbox2" value="option4" /> Option
+          4</label
+        >
+        <label
+          ><input type="checkbox" name="checkbox1" value="option5" /> Option
+          5</label
+        >
+        <label
+          ><input type="checkbox" name="checkbox2" value="option6" /> Option
+          6</label
+        >
+      </div>
+
+      <!-- Dropdown -->
+      <label for="dropdown">Dropdown:</label>
+      <select id="dropdown" name="dropdown">
+        <option value="option1">Option 1</option>
+        <option value="option2">Option 2</option>
+        <option value="option3">Option 3</option>
+        <option value="option1">Option 4</option>
+        <option value="option2">Option 5</option>
+        <option value="option3">Option 6</option>
+      </select>
+
+      <!-- Radio Button -->
+      <div class="radio-group">
+        <label>Radio Buttons:</label>
+        <label
+          ><input type="radio" name="radioGroup" value="option1" /> Option
+          1</label
+        >
+        <label
+          ><input type="radio" name="radioGroup" value="option2" /> Option
+          2</label
+        >
+      </div>
+
+      <!-- Date Picker -->
+      <label for="datePicker">Date Picker:</label>
+      <input type="date" id="datePicker" name="datePicker" />
+
+      <!-- Submit Button -->
+      <button type="submit" style="margin-top: 20px">Submit</button>
+    </form>
+
+    <div id="successMessage" class="success-message">
+      Form submitted successfully!
+    </div>
+
+    <script>
+      document
+        .getElementById("exampleForm")
+        .addEventListener("submit", function (event) {
+          event.preventDefault();
+          document.getElementById("successMessage").style.display = "block";
+        });
+    </script>
+  </body>
+</html>
