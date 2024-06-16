@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "ui": "npx cypress open",
-    "terminal": "npx cypress run"
+    "terminal": "npx cypress run",
+    "cypress-dashboard": "npx cypress run --record -key 64053d5c-d5cb-4b21-96aa-e74a50c81db0"
   },
   "author": "",
   "license": "ISC",
