@@ -2,9 +2,50 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Form Elements Example</title>
     <style>
+      .tooltip {
+        position: relative;
+        display: inline-block;
+        cursor: pointer;
+      }
+
+      .tooltip .tooltiptext {
+        visibility: hidden;
+        width: 150px;
+        background-color: #555;
+        color: #fff;
+        text-align: center;
+        border-radius: 6px;
+        padding: 5px;
+        position: absolute;
+        z-index: 1;
+        bottom: 125%; /* Position the tooltip above the icon */
+        left: 50%;
+        transform: translateX(-50%);
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+
+      .tooltip .tooltiptext::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -5px;
+        border-width: 5px;
+        border-style: solid;
+        border-color: #555 transparent transparent transparent;
+      }
+
+      .tooltip:hover .tooltiptext {
+        visibility: visible;
+        opacity: 1;
+      }
+
       body {
         font-family: Arial, sans-serif;
         margin: 20px;
@@ -60,6 +101,11 @@
         name="textInput"
         placeholder="Enter some text"
       />
+      <div class="tooltip">
+        <i class="fas fa-info-circle fa-2x"></i>
+        <div class="tooltiptext">This is a tooltip with text!</div>
+      </div>
+
       <label for="textInput">Text Input:</label>
       <input
         type="text"
