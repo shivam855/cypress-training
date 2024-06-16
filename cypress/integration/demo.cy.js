@@ -8,7 +8,7 @@ describe("Visit the website", () => {
     });
   });
   it("visit web page", () => {
-    // cy.visit("https://demoqa.com/elements/text-box",{ timeout: 100000 });
+    cy.visit("https://demoqa.com/elements/text-box",{ timeout: 100000 });
     // cy.contains('[class="category-cards"]',"Elements").click({force:true}).wait(2000);
   });
 });
