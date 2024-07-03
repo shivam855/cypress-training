@@ -23,3 +23,36 @@
 //
 // -- This will overwrite an existing command --
 // Cypress.Commands.overwrite('visit', (originalFn, url, options) => { ... })
+
+
+import locator from "../pages/loc";
+
+// cypress/support/commands.js
+// cypress/support/commands.js
+// cypress/support/commands.js
+// cypress/support/commands.js
+// cypress/support/commands.js
+Cypress.Commands.add('runBackstop', (action, url) => {
+  cy.task('updateBackstopConfig', url).then(() => {
+    cy.exec(`npx backstop ${action}`).then((result) => {
+      cy.log(result.stdout);
+      if (result.stderr) {
+        throw new Error(result.stderr);
+      }
+    }).then(() => {
+      cy.task('resetBackstopConfig');
+    });
+  });
+});
+
+
+
+
+
+Cypress.Commands.add("Login", (url, user, pass) => {
+  cy.visit(url);
+  locator.getLocator("userName").type(user);
+  locator.getLocator("password").type(pass);
+  locator.getLocator("submitBtn").contains("Login").click();
+  cy.contains("h6", "Dashboard").should("be.visible");
+});

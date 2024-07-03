@@ -1,3 +1,6 @@
 node_modules
 /node_modules
 package-lock.json
+/backstop_data
+/coverage-cy
+/.nyc_output

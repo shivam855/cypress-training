@@ -6,13 +6,35 @@
   "scripts": {
     "ui": "npx cypress open",
     "terminal": "npx cypress run",
-    "cypress-dashboard": "npx cypress run --record -key 64053d5c-d5cb-4b21-96aa-e74a50c81db0"
+    "cypress-dashboard": "npx cypress run --record -key 64053d5c-d5cb-4b21-96aa-e74a50c81db0",
+    "gcr": "npx nyc report --reporter=text-lcov > coverage.lcov && npx codecov"
   },
   "author": "",
   "license": "ISC",
+  "nyc": {
+    "report-dir": "coverage-cy",
+    "reporter": [
+      "lcov",
+      "html",
+      "json"
+    ],
+    "extension": [
+      ".js"
+    ],
+    "exclude": [
+      "**/node_modules/**"
+    ],
+    "include": [
+      "src/**/*.js"
+    ]
+  },
   "dependencies": {
     "cypress": "^13.11.0",
     "cypress-cucumber-preprocessor": "^4.3.1",
     "cypress-real-events": "^1.13.0"
+  },
+  "devDependencies": {
+    "@cypress/code-coverage": "^3.12.39",
+    "backstopjs": "^6.3.23"
   }
 }
