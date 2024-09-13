@@ -4,3 +4,6 @@ package-lock.json
 /backstop_data
 /coverage-cy
 /.nyc_output
+e2e
+screenshots
+__assets__

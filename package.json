@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "ui": "npx cypress open",
+    
+    "ui": "npx cypress run",
+    "postui": "node reportHtmlGenerator.js",
     "terminal": "npx cypress run",
     "cypress-dashboard": "npx cypress run --record -key 64053d5c-d5cb-4b21-96aa-e74a50c81db0",
     "gcr": "npx nyc report --reporter=text-lcov > coverage.lcov && npx codecov"
@@ -31,10 +33,19 @@
   "dependencies": {
     "cypress": "^13.11.0",
     "cypress-cucumber-preprocessor": "^4.3.1",
-    "cypress-real-events": "^1.13.0"
+    "cypress-real-events": "^1.13.0",
+    "multiple-cucumber-html-reporter": "^3.7.0",
+    "puppeteer": "^22.12.1"
   },
   "devDependencies": {
     "@cypress/code-coverage": "^3.12.39",
     "backstopjs": "^6.3.23"
+  },
+  "cypress-cucumber-preprocessor": {
+    "step_definitions": "./cypress/steps",
+    "cucumberJson": {
+      "generate": true,
+      "outputFolder": "__assets__/e2e/reports"
+    }
   }
 }

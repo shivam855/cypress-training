@@ -24,35 +24,26 @@
 // -- This will overwrite an existing command --
 // Cypress.Commands.overwrite('visit', (originalFn, url, options) => { ... })
 
+afterEach(() => {
+    const screenshotsFolder = Cypress.config("screenshotsFolder");
+    if (window.cucumberJson?.generate) {
+        const testState = window.testState;
+        const stepResult =
+            testState.runTests[testState.currentScenario.name][testState.currentStep];
+        if (stepResult?.status === "failed") {
+            const screenshotFileName = `${testState.feature.name} -- ${testState.currentScenario.name} (failed).png`;
+            cy.readFile(
+                `${screenshotsFolder}/${Cypress.spec.name}/${screenshotFileName}`,
+                "base64"
+            ).then((imgData) => {
+                stepResult.attachment = {
+                    data: imgData,
+                    media: { type: "image/png" },
+                    index: testState.currentStep,
+                    testCase: testState.formatTestCase(testState.currentScenario),
+                };
+            });
 
-import locator from "../pages/loc";
-
-// cypress/support/commands.js
-// cypress/support/commands.js
-// cypress/support/commands.js
-// cypress/support/commands.js
-// cypress/support/commands.js
-Cypress.Commands.add('runBackstop', (action, url) => {
-  cy.task('updateBackstopConfig', url).then(() => {
-    cy.exec(`npx backstop ${action}`).then((result) => {
-      cy.log(result.stdout);
-      if (result.stderr) {
-        throw new Error(result.stderr);
-      }
-    }).then(() => {
-      cy.task('resetBackstopConfig');
-    });
-  });
-});
-
-
-
-
-
-Cypress.Commands.add("Login", (url, user, pass) => {
-  cy.visit(url);
-  locator.getLocator("userName").type(user);
-  locator.getLocator("password").type(pass);
-  locator.getLocator("submitBtn").contains("Login").click();
-  cy.contains("h6", "Dashboard").should("be.visible");
+        }
+    }
 });
