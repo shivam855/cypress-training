@@ -1,49 +1,41 @@
-// ***********************************************
-// This example commands.js shows you how to
-// create various custom commands and overwrite
-// existing commands.
-//
-// For more comprehensive examples of custom
-// commands please read more here:
-// https://on.cypress.io/custom-commands
-// ***********************************************
-//
-//
-// -- This is a parent command --
-// Cypress.Commands.add('login', (email, password) => { ... })
-//
-//
-// -- This is a child command --
-// Cypress.Commands.add('drag', { prevSubject: 'element'}, (subject, options) => { ... })
-//
-//
-// -- This is a dual command --
-// Cypress.Commands.add('dismiss', { prevSubject: 'optional'}, (subject, options) => { ... })
-//
-//
-// -- This will overwrite an existing command --
-// Cypress.Commands.overwrite('visit', (originalFn, url, options) => { ... })
-
 afterEach(() => {
-    const screenshotsFolder = Cypress.config("screenshotsFolder");
-    if (window.cucumberJson?.generate) {
+    try {
+      cy.window().then((win) => win.gc);
+  
+      let screenshotPath = "";
+      if (window.cucumberJson?.generate) {
         const testState = window.testState;
         const stepResult =
-            testState.runTests[testState.currentScenario.name][testState.currentStep];
+          testState.runTests[testState.currentScenario.name][testState.currentStep];
+  
         if (stepResult?.status === "failed") {
-            const screenshotFileName = `${testState.feature.name} -- ${testState.currentScenario.name} (failed).png`;
-            cy.readFile(
-                `${screenshotsFolder}/${Cypress.spec.name}/${screenshotFileName}`,
-                "base64"
-            ).then((imgData) => {
+          const screenshotFileName = `${Cypress.spec.name}_${Date.now()}`;
+          cy.screenshot(screenshotFileName, {
+            capture: "runner",
+            onAfterScreenshot($el, props) {
+              // Get relative path from screenshots folder
+              screenshotPath = `cypress/screenshots/${Cypress.spec.name}/${screenshotFileName}.png`;
+            },
+          }).then(() => {
+            // Wait to ensure the screenshot file is completely written
+            cy.wait(1000); // Adjust as needed
+  
+            // Use relative path instead of absolute path
+            cy.readFile(screenshotPath, "base64").then((imgData) => {
+              if (imgData) {
                 stepResult.attachment = {
-                    data: imgData,
-                    media: { type: "image/png" },
-                    index: testState.currentStep,
-                    testCase: testState.formatTestCase(testState.currentScenario),
+                  data: imgData,
+                  media: { type: "image/png" },
+                  index: testState.currentStep,
+                  testCase: testState.formatTestCase(testState.currentScenario),
                 };
+              }
             });
-
+          });
         }
+      }
+    } catch (e) {
+      console.log(e);
     }
-});
+  });
+  

@@ -21,6 +21,5 @@ report.generate({
       { label: 'Execution Date', value: new Date().toString() }
     ]
   },
-  screenshotsDirectory: 'cypress/screenshots', // Attach screenshots
-  storeScreenshots: true // Ensure the screenshots are linked
+  
 });
