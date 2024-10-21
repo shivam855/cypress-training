@@ -1,0 +1,165 @@
+name: UI Deployment to Akamai
+
+on:
+  workflow_dispatch:
+    inputs:
+      folder-colour:
+        description: Folder Colour
+        default: "green"
+        required: true
+      version-number:
+        description: Version number to deploy. Leave blank for the latest
+        required: false
+      stage:
+        description: Stage to deploy to. Valid values are "cdt"  "preprod" and "prod"
+        required: true
+        default: "cdt"
+  workflow_run:
+    workflows: ["Build & upload artifact"]
+    types: [completed]
+
+concurrency:
+  group: stage-${{ github.event.inputs.stage }}
+  cancel-in-progress: false
+
+jobs:
+  on-failure:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    steps:
+      - name: Teams Failure notification
+        if: ${{ failure() }}
+        uses: jdcargile/ms-teams-notification@v1.2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          ms-teams-webhook-uri: ${{ secrets.TEAMS_WEBHOOK_URI }}
+          notification-summary: Artifact deployment was not run due to failed upload
+          notification-color: B80012
+
+  deploy-to-akamai:
+    runs-on: ubuntu-20.04
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event.inputs.stage == 'cdt' || github.event.inputs.stage == 'preprod' || github.event.inputs.stage == 'prod' }}
+    env:
+      NEXUS_URL: https://tools-nexus.maerskdev.net/repository/maven-hosted-releases
+      ARTIFACT_NAME: ui-booking
+      ARTIFACT_VERSION: ${{ github.event.inputs.version-number }}
+      NET_USER: sshacs
+      NET_HOST: maersknscdt.upload.akamai.com # Default is CDT
+      NEXUS_USER: ${{ secrets.MDN_NEXUS_WRITE_USERNAME }}
+      NEXUS_PASS: ${{ secrets.MDN_NEXUS_WRITE_PASSWORD }}
+      TARGETDIR: ${{ github.event.inputs.folder-colour }}
+      STAGE: ${{ github.event.inputs.stage }}
+    steps:
+      #  Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Get the latest version
+        uses: ./.github/actions/getAppVersion
+        id: versionNumber
+
+      - name: Ensure defaults are set
+        run: |
+          if [[ -z $TARGETDIR ]]
+          then
+            echo TARGETDIR=green >> $GITHUB_ENV
+          fi
+          if [[ -z $ARTIFACT_VERSION ]]
+          then
+            echo ARTIFACT_VERSION=${{ steps.versionNumber.outputs.version }} >> $GITHUB_ENV
+          fi
+          if [[ -z $STAGE ]]
+          then
+            echo STAGE=cdt >> $GITHUB_ENV
+          fi
+          if [[ $STAGE == 'preprod' ]]
+          then
+            echo NET_HOST=maerskns.upload.akamai.com >> $GITHUB_ENV
+          fi
+          if [[ $STAGE == 'prod' ]]
+          then
+            echo NET_HOST=firstnsdemo.upload.akamai.com >> $GITHUB_ENV
+          fi
+
+      - name: Read the configuration in uiConfig.yaml
+        run: |
+          echo ARTIFACT_LOCATION=$(grep "artifactLocation" ./pipelineConfig/uiConfig.yaml|cut -d':' -f2 | xargs | sed 's/\./\//g') >> $GITHUB_ENV
+          echo TENANT=$(grep "tenant" ./pipelineConfig/uiConfig.yaml|cut -d':' -f2 | xargs) >> $GITHUB_ENV
+
+      - name: Retrieve tar pkg from Nexus and unpack it
+        run: |
+          mkdir upload
+          touch upload/v.txt
+          ARTIFACT_URL=$NEXUS_URL/$ARTIFACT_LOCATION/$ARTIFACT_NAME/$ARTIFACT_VERSION/$ARTIFACT_NAME-$ARTIFACT_VERSION.tgz
+          echo $ARTIFACT_URL
+          curl -s -S --fail -u "$NEXUS_USER:$NEXUS_PASS" $ARTIFACT_URL -O
+          tar -zxvf $ARTIFACT_NAME-$ARTIFACT_VERSION.tgz -C upload/
+          echo $ARTIFACT_VERSION > upload/v.txt
+
+      - name: Create & store the CDT ssh key and create a ssh config file
+        if: ${{ env.STAGE == 'cdt' }}
+        run: |
+          mkdir ~/.ssh
+          chmod 700 ~/.ssh
+          touch akamaikey
+          echo "${{ secrets.AKAMAI_SSH_KEY_CDT }}" > akamaikey && chmod 700 akamaikey
+          echo -e 'HostkeyAlgorithms +ssh-dss\nPubkeyAcceptedKeyTypes +ssh-dss\nStrictHostKeyChecking no' > ~/.ssh/config
+
+      - name: Create & store the pre-prod ssh key and create a ssh config file
+        if: ${{ env.STAGE == 'preprod' }}
+        run: |
+          mkdir ~/.ssh
+          chmod 700 ~/.ssh
+          touch akamaikey
+          echo "${{ secrets.AKAMAI_SSH_KEY_PP }}" > akamaikey && chmod 700 akamaikey
+          echo -e 'HostkeyAlgorithms +ssh-dss\nPubkeyAcceptedKeyTypes +ssh-dss\nStrictHostKeyChecking no' > ~/.ssh/config
+
+      - name: Create & store the prod ssh key and create a ssh config file
+        if: ${{ env.STAGE == 'prod' }}
+        run: |
+          mkdir ~/.ssh
+          chmod 700 ~/.ssh
+          touch akamaikey
+          echo "${{ secrets.AKAMAI_SSH_KEY_PROD }}" > akamaikey && chmod 700 akamaikey
+          echo -e 'HostkeyAlgorithms +ssh-dss\nPubkeyAcceptedKeyTypes +ssh-dss\nStrictHostKeyChecking no' > ~/.ssh/config
+
+      - name: Create remote directory
+        run: |
+          echo -mkdir $TARGETDIR | sftp -b - -i akamaikey $NET_USER@$NET_HOST
+
+      - name: Deploy the artifact
+        run: |
+          rsync -aq --timeout=180 -e 'ssh -oPubkeyAuthentication=yes -i akamaikey' upload/ $NET_USER@$NET_HOST:$TARGETDIR
+          rm akamaikey
+
+      # Tag is env#endpoint#folder
+      - name: Purge Akamai cache
+        run: |
+          touch .edgerc
+          cat << EOF > .edgerc
+          [ccu]
+          client_secret = ${{ secrets.AKAMAI_PURGE_CACHE_CLIENT_SECRET }}
+          host = ${{ secrets.AKAMAI_PURGE_CACHE_HOST }}
+          access_token = ${{ secrets.AKAMAI_PURGE_CACHE_ACCESS_TOKEN }}
+          client_token = ${{ secrets.AKAMAI_PURGE_CACHE_CLIENT_TOKEN}}
+          EOF
+          cat .edgerc
+          docker run --rm -t -v $GITHUB_WORKSPACE/.edgerc:/root/.edgerc:ro akamai/purge akamai purge invalidate --tag $STAGE#$TENANT#$TARGETDIR
+
+      - name: Teams Failure notification
+        if: ${{ failure() }}
+        uses: jdcargile/ms-teams-notification@v1.3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          ms-teams-webhook-uri: ${{ secrets.TEAMS_WEBHOOK_URI }}
+          notification-summary: Deployment of version ${{ env.ARTIFACT_VERSION }} to ${{ env.STAGE }}/${{ env.TARGETDIR }} has failed
+          notification-color: B80012
+
+      - name: Teams Success notification
+        if: ${{ success() }}
+        uses: jdcargile/ms-teams-notification@v1.3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          ms-teams-webhook-uri: ${{ secrets.TEAMS_WEBHOOK_URI }}
+          notification-summary: Deployment of version ${{ env.ARTIFACT_VERSION }} to ${{ env.STAGE }}/${{ env.TARGETDIR }} was successful
+          notification-color: 40AB35

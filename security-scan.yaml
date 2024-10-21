@@ -1,0 +1,65 @@
+# This is a basic workflow to help you get started with Actions
+
+name: Security Scan
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  # https://github.community/t/paths-ignore-not-working-for-base-level-files/18445/4
+  check-changes:
+    runs-on: ubuntu-20.04
+    outputs:
+      continue: ${{steps.changefile.outputs.continue}}
+    steps:
+      - uses: actions/checkout@v2
+        if: ${{ always() }}
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: git branch
+
+      - name: file changes
+        id: changefile
+        # Checks if the commit author is the Hudson user. If it is, then don't continue
+        run: |
+          commit_author=$(git log -1 --pretty=format:'%ae' | xargs)
+          echo "AUTHOR"
+          echo $commit_author
+          if [[ -z $commit_author || $commit_author == 'no-reply-hudson@maersk.com' ]]
+          then
+            echo ::set-output name=continue::false
+          else
+            echo ::set-output name=continue::true
+          fi
+  Polaris:
+    runs-on: ubuntu-20.04
+    # Only run if check-changes says it should continue
+    needs: check-changes
+    if: needs.check-changes.outputs.continue == 'true'
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: 'Checkout local actions'
+        uses: actions/checkout@v2
+        with:
+          repository: Maersk-Global/github-actions
+          token: ${{ secrets.REPO_CHECKOUT_TOKEN }}
+          path: .github/actions/maersk-actions
+
+      - name: Polaris Scan and Group Assignment
+        uses: ./.github/actions/maersk-actions/polaris_scan
+        with:
+          polaris_token: ${{ secrets.POLARIS_API_TOKEN }}
+          webapp_scan: 'true'
+          polaris_server: ${{ secrets.POLARIS_SERVER_URL }}
+          severity: "critical:0,high:0,medium:0"
+          repo_name: '${{ env.GITHUB_WORKSPACE }}'
+          break_build: 'true'
+
+      - name: Upload resultFile
+        uses: actions/upload-artifact@v3
+        with:
+          name: polaris-scan-results
+          path: polaris-results.sarif.json

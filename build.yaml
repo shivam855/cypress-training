@@ -1,0 +1,227 @@
+# This workflow will do a clean install of node dependencies, build the source code and run tests across different versions of node
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-nodejs-with-github-actions
+
+name: Build & Sonar
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [master, feature/deployactions]
+    types: [opened, synchronize]
+
+#  Only one of these jobs runs at a time per branch, this cancels the other running jobs
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # https://github.community/t/paths-ignore-not-working-for-base-level-files/18445/4
+  check-changes:
+    runs-on: ubuntu-20.04
+    # Only run if the previous workflow was a success
+    outputs:
+      continue: ${{steps.changefile.outputs.continue}}
+    steps:
+      # Remove all bot-set labels from the issue
+      - uses: actions/github-script@v4
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            const labels = await github.issues.listLabelsOnIssue({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            labels.data.forEach(label => {
+              if (['Unit tests failing', 'Sonar failing', 'E2E Tests Failing'].includes(label)) {
+                github.issues.removeLabel({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label
+                });
+              }
+            })
+      - uses: actions/checkout@v2
+        if: ${{ always() }}
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: git branch
+      - name: file changes
+        id: changefile
+        # Checks if the commit author is the Hudson user. If it is, then don't continue
+        run: |
+          commit_author=$(git log -1 --pretty=format:'%ae' | xargs)
+          echo "AUTHOR"
+          echo $commit_author
+          if [[ -z $commit_author || $commit_author == 'no-reply-hudson@maersk.com' ]]
+          then
+            echo ::set-output name=continue::false
+          else
+            echo ::set-output name=continue::true
+          fi
+  build-test-sonar:
+    runs-on: ubuntu-20.04
+    # Only run if check-changes says it should continue
+    needs: check-changes
+    if: needs.check-changes.outputs.continue == 'true'
+    strategy:
+      matrix:
+        node-version: [16.x]
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v2
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Set up npm registry
+        uses: bduff9/use-npmrc@v1.2
+        with:
+          dot-npmrc: ${{ secrets.NEXUS_GITHUB_NPMRC }}
+
+      # CI, Build and Test
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+      - name: Add Unit test labels
+        if: ${{ failure() }}
+        uses: actions/github-script@v4
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['Unit tests failing']
+            })
+
+      - name: Cancel run on unit test failure
+        uses: actions/github-script@v4
+        id: checkunittest
+        if: ${{ failure() }}
+        with:
+          script: |
+            const { owner, repo } = context.repo
+            console.log('Cancelling ...');
+            const run_id = "${{ github.run_id }}";
+            await github.actions.cancelWorkflowRun({ owner, repo, run_id });
+            return 'stop'
+          result-encoding: string
+
+      - name: Waiting for unit test cancellation
+        run: sleep 60
+        if: steps.checkunittest.outputs.result == 'stop'
+
+      - name: Checkout Maersk Github Actions
+        if: ${{ success() }}
+        uses: actions/checkout@v2
+        with:
+          repository: Maersk-Global/github-actions
+          token: ${{ secrets.REPO_CHECKOUT_TOKEN }}
+          path: .github/actions/maersk-actions
+      # Sonar has to run after the tests have run, or there is no lcov file to be processed
+      # All params are passed in here rather than the sonar.properties file as the provided action has some merge issues
+      # Due to https://github.com/facebook/jest/issues/9773 you need Jest 25 or higher to generate an lcov report with relateive file paths
+      # otherwise sonar-scanner (in a docker container) can't resolve the file paths and the coverage report fails
+      # packages needed: @vue/cli-plugin-unit-jest@5 babel-jest@25 jest@25 vue-jest@4
+      - name: SonarQube
+        id: sonar
+        if: ${{ success() }}
+        uses: ./.github/actions/maersk-actions/SonarQube
+        with:
+          host: ${{ secrets.MDN_SonarQube_Host }}
+          login: ${{ secrets.MDN_SonarQube_Token }}
+          extra_sonar_args: -Dsonar.sources=src -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info -Dsonar.testExecutionReportPaths=coverage/test-reporter.xml -Dsonar.exclusions=src/main.js -Dsonar.language=js
+      - name: Add Sonar labels
+        if: ${{ steps.sonar.outcome == 'failure' }}
+        uses: actions/github-script@v4
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['Sonar failing']
+            })
+
+  just-one-test:
+    runs-on: ubuntu-20.04
+    needs: check-changes
+    if: needs.check-changes.outputs.continue == 'true'
+    strategy:
+      matrix:
+        node-version: [16.x]
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v2
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Set up npm registry
+        uses: bduff9/use-npmrc@v1.2
+        with:
+          dot-npmrc: ${{ secrets.NEXUS_GITHUB_NPMRC }}
+
+      - uses: cypress-io/github-action@v4
+        name: Cypress run
+        with:
+          start: npm run serve:prod
+          wait-on: "http://localhost:8080/book/"
+          wait-on-timeout: 180
+          config-file: cypress.config.ts
+          record: true
+          parallel: false
+          browser: chrome
+          # This is just a single test to get us end-to-end
+          spec: |
+            cypress/integration/book/bookingConfirm/SubmitBookingResponse.feature
+        env:
+          CYPRESS_PROJECT_ID: ${{ secrets.CYPRESS_PROJECT_ID }}
+          CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
+          CYPRESS_USER: ${{ secrets.CYPRESS_USER }}
+          CYPRESS_PASS: ${{ secrets.CYPRESS_PASS }}
+          CYPRESS_USER_EXT: ${{ secrets.CYPRESS_USER_EXT }}
+          CYPRESS_PASS_EXT: ${{ secrets.CYPRESS_PASS_EXT }}
+          CYPRESS_lang: en
+          CYPRESS_brand: maersk
+          CYPRESS_host: dev
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add E2E labels
+        if: ${{ failure() }}
+        uses: actions/github-script@v4
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['E2E Tests Failing']
+            })
+
+      - name: Cancel run on E2E test failure
+        uses: actions/github-script@v4
+        id: checke2etest
+        if: ${{ failure() }}
+        with:
+          script: |
+            const { owner, repo } = context.repo
+            console.log('Cancelling ...');
+            const run_id = "${{ github.run_id }}";
+            await github.actions.cancelWorkflowRun({ owner, repo, run_id });
+            return 'stop'
+          result-encoding: string
+
+      - name: Waiting for E2E test cancellation
+        run: sleep 60
+        if: steps.checke2etest.outputs.result == 'stop'

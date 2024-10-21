@@ -1,0 +1,106 @@
+name: Cypress Prod Sanity
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to run tests against (dev, cdt, preprod, prod, beta)"
+        required: true
+        default: "prod"
+
+  #schedule:
+    # “At minute 30, 10, and 30 past hour 1, 11, and 13 on every day-of-week from Sunday through Saturday.” https://crontab.guru/#30,10,30_1,11,13_*_*_0-6
+    #- cron: 30,30 1,13 * * 0-6
+
+jobs:
+  cypress-run:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 20
+    outputs:
+      failure: ${{ steps.set-failure.outputs.status }}
+    env:
+      ENV_TARGET: ${{ github.event.inputs.environment }}
+    strategy:
+      # when one test fails, DO NOT cancel the other
+      # containers, because this will kill Cypress processes
+      # leaving the Dashboard hanging ...
+      # https://github.com/cypress-io/github-action/issues/48
+      fail-fast: false
+      matrix:
+        containers: [1]
+        node-version: [16.x]
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          ref: feature/Cypress_Prod
+          
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Set up npm registry
+        uses: bduff9/use-npmrc@v1.2
+        with:
+          dot-npmrc: ${{ secrets.NEXUS_GITHUB_NPMRC }}
+
+      - name: Ensure defaults are set
+        run: |
+          if [[ -z $ENV_TARGET ]]
+          then
+            echo ENV_TARGET=prod >> $GITHUB_ENV
+          fi
+
+      - uses: cypress-io/github-action@v4.2.0
+        name: Cypress run
+        if: ${{ env.ENV_TARGET == 'prod' }}
+        with:
+          start: npm run test:e2e:prod
+          config-file: cypress.config.ts
+          record: true
+          parallel: true
+          browser: chrome
+          tag: env-${{ env.ENV_TARGET }}
+          spec: |
+            cypress/integration/features/prodSanity/newBooking/{prodSanity_NewMLIBooking,prodSanity_NewPMABooking}.feature
+        env:
+          CYPRESS_PROJECT_ID: ${{ secrets.CYPRESS_PROJECT_ID }}
+          CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
+          CYPRESS_PROD_USER_INT: ${{ secrets.CYPRESS_PROD_USER_INT }}
+          CYPRESS_PROD_PASS_INT: ${{ secrets.CYPRESS_PROD_PASS_INT }}
+          CYPRESS_PROD_USER_EXT: ${{ secrets.CYPRESS_PROD_USER_EXT }}
+          CYPRESS_PROD_PASS_EXT: ${{ secrets.CYPRESS_PROD_PASS_EXT }}
+          CYPRESS_lang: en
+          CYPRESS_brand: maersk
+          CYPRESS_host: ${{ env.ENV_TARGET }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  
+
+      - id: set-failure
+        if: failure()
+        run: echo "::set-output name=status::true"
+
+  # Send notifications is a separate job or it runs at the end of every part of the matrix job
+  #send-notifications:
+    #runs-on: ubuntu-20.04
+    #needs: cypress-run
+    #if: always()
+    #steps:
+      #- name: Teams Failure notification
+        #if: ${{ needs.cypress-run.outputs.failure == 'true' }}
+        #uses: jdcargile/ms-teams-notification@master
+        #with:
+          #github-token: ${{ secrets.GITHUB_TOKEN }}
+          #ms-teams-webhook-uri: ${{ secrets.TEAMS_WEBHOOK_URI_PROD_SANITY }}
+          #notification-summary: 😢 Cypress Prod sanity test cases have failed
+          #notification-color: B80012
+
+      #- name: Teams Success notification
+        #if: ${{ needs.cypress-run.outputs.failure != 'true' }}
+        #uses: jdcargile/ms-teams-notification@master
+        #with:
+          #github-token: ${{ secrets.GITHUB_TOKEN }}
+          #ms-teams-webhook-uri: ${{ secrets.TEAMS_WEBHOOK_URI_PROD_SANITY }}
+          #notification-summary: 🎉 Cypress Prod sanity test cases have passed
+          #notification-color: 40AB35
+          
