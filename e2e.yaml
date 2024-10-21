@@ -1,0 +1,134 @@
+name: Cypress E2E Tests only
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to run tests against (dev, cdt, preprod, prod, beta)"
+        required: true
+        default: "dev"
+  # At the request of the platform, we're slowing down the e2e test regular runs.
+  # It's not done on master deployment right now, but 3 times a day in the middle of the week
+  # Expect this to be removed and the workflow run be put back in when the enterprise license comes around
+  # You can still run the tests manually using the manual action
+  # Note - as of 25th August 2021 - the purchase order has been signed and we're expecting the tool to be available soon.
+  #schedule:
+    # “At minute 0 past hour 9, 12, and 15 on every day-of-week from Monday through Friday.” https://crontab.guru/#0_9,12,15_*_*_1-5
+    #- cron: 0 9,12,15 * * 1-5
+  # workflow_run:
+  #   workflows: ["UI Deployment to Akamai"]
+  #   types: [completed]
+
+jobs:
+  cypress-run:
+    runs-on: ubuntu-20.04
+    outputs:
+      failure: ${{ steps.set-failure.outputs.status }}
+    env:
+      ENV_TARGET: ${{ github.event.inputs.environment }}
+    strategy:
+      # when one test fails, DO NOT cancel the other
+      # containers, because this will kill Cypress processes
+      # leaving the Dashboard hanging ...
+      # https://github.com/cypress-io/github-action/issues/48
+      fail-fast: false
+      matrix:
+        containers: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        node-version: [16.x]
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Set up npm registry
+        uses: bduff9/use-npmrc@v1.2
+        with:
+          dot-npmrc: ${{ secrets.NEXUS_GITHUB_NPMRC }}
+
+      - name: Ensure defaults are set
+        run: |
+          if [[ -z $ENV_TARGET ]]
+          then
+            echo ENV_TARGET=dev >> $GITHUB_ENV
+          fi
+
+      - uses: cypress-io/github-action@v4.2.0
+        name: Cypress run
+        if: ${{ env.ENV_TARGET == 'dev' }}
+        with:
+          start: npm run serve:prod
+          wait-on: "http://localhost:8080/book/"
+          wait-on-timeout: 180
+          config-file: cypress.config.ts
+          record: true
+          parallel: true
+          browser: chrome
+          tag: env-${{ env.ENV_TARGET }}
+          spec: |
+            cypress/integration/features/pipeline/**/*.feature
+        env:
+          CYPRESS_PROJECT_ID: ${{ secrets.CYPRESS_PROJECT_ID }}
+          CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
+          CYPRESS_USER: ${{ secrets.CYPRESS_USER }}
+          CYPRESS_PASS: ${{ secrets.CYPRESS_PASS }}
+          CYPRESS_USER_EXT: ${{ secrets.CYPRESS_USER_EXT }}
+          CYPRESS_PASS_EXT: ${{ secrets.CYPRESS_PASS_EXT }}
+          CYPRESS_lang: en
+          CYPRESS_brand: maersk
+          CYPRESS_host: ${{ env.ENV_TARGET }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: cypress-io/github-action@v4.2.0
+        name: Cypress run
+        if: ${{ env.ENV_TARGET != 'dev' }}
+        with:
+          config-file: cypress.config.ts
+          record: true
+          parallel: true
+          browser: chrome
+          tag: env-${{ env.ENV_TARGET }}
+          spec: |
+            cypress/integration/features/end-to-end/*.feature
+        env:
+          CYPRESS_PROJECT_ID: ${{ secrets.CYPRESS_PROJECT_ID }}
+          CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
+          CYPRESS_USER: ${{ secrets.CYPRESS_USER }}
+          CYPRESS_PASS: ${{ secrets.CYPRESS_PASS }}
+          CYPRESS_USER_EXT: ${{ secrets.CYPRESS_USER_EXT }}
+          CYPRESS_PASS_EXT: ${{ secrets.CYPRESS_PASS_EXT }}
+          CYPRESS_lang: en
+          CYPRESS_brand: maersk
+          CYPRESS_host: ${{ env.ENV_TARGET }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: set-failure
+        if: failure()
+        run: echo "::set-output name=status::true"
+
+  # Send notifications is a separate job or it runs at the end of every part of the matrix job
+  send-notifications:
+    runs-on: ubuntu-20.04
+    needs: cypress-run
+    if: always()
+    steps:
+      - name: Teams Failure notification
+        if: ${{ needs.cypress-run.outputs.failure == 'true' }}
+        uses: jdcargile/ms-teams-notification@v1.3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          ms-teams-webhook-uri: ${{ secrets.TEAMS_WEBHOOK_URI }}
+          notification-summary: 😢 Cypress E2E tests on ${{ env.ENV_TARGET }} have failed
+          notification-color: B80012
+
+      - name: Teams Success notification
+        if: ${{ needs.cypress-run.outputs.failure != 'true' }}
+        uses: jdcargile/ms-teams-notification@v1.3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          ms-teams-webhook-uri: ${{ secrets.TEAMS_WEBHOOK_URI }}
+          notification-summary: 🎉 Cypress E2E tests on ${{ env.ENV_TARGET }} have passed
+          notification-color: 40AB35
